@@ -1,0 +1,5 @@
+/__pycache__
+*.pyc
+.env
+.env.*
+leaderboard_state.json
