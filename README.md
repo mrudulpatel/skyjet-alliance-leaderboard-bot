@@ -7,7 +7,7 @@ This bot reads your `contract-board` forum posts and posts a monthly leaderboard
 - Slash command: `/archived_posts`
 - Fetches archived forum posts page-by-page (`page_size` configurable, max 100)
 - Exports full results as a JSON attachment
-- Slash command: `/post_monthly_leaderboard` (manual trigger)
+- Slash command: `/contract-leaderboard` (manual trigger)
 - Automatic monthly leaderboard posting (first day of month)
 - Creates `leaderboard` channel automatically if missing (when bot has `Manage Channels` permission)
 - Counts contracts claimed via forum post tags (tag name = member name)
@@ -65,7 +65,7 @@ The bot replies with:
 ### Monthly Leaderboard
 
 - Automatic: bot checks every 30 minutes and posts once on day `1` of each month.
-- Manual: `/post_monthly_leaderboard`
+- Manual: `/contract-leaderboard`
 - Optional manual params:
   - `forum_channel_id:<id>`
   - `leaderboard_channel_id:<id>`
