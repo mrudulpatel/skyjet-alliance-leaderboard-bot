@@ -451,7 +451,12 @@ class ForumArchiveBot(commands.Bot):
 			thread.id: thread for thread in [*active_threads, *archived_threads]
 		}
 
-		counts: Counter[str] = Counter()
+		member_tag_names = [
+			tag.name.strip()
+			for tag in forum_channel.available_tags
+			if tag.name and tag.name.strip() and tag.name.strip().lower() not in self.ignore_tags
+		]
+		counts: Counter[str] = Counter({member_name: 0 for member_name in member_tag_names})
 		considered_threads = 0
 		unclaimed_threads = 0
 
@@ -469,12 +474,14 @@ class ForumArchiveBot(commands.Bot):
 				continue
 			counts[claimant] += 1
 
+		active_claimants = sum(1 for count in counts.values() if count > 0)
 		LOGGER.info(
-			"Leaderboard built for month=%s: considered=%s claimed=%s unclaimed=%s unique_claimants=%s",
+			"Leaderboard built for month=%s: considered=%s claimed=%s unclaimed=%s active_claimants=%s member_tags=%s",
 			month_label,
 			considered_threads,
 			considered_threads - unclaimed_threads,
 			unclaimed_threads,
+			active_claimants,
 			len(counts),
 		)
 
@@ -512,7 +519,10 @@ class ForumArchiveBot(commands.Bot):
 		if not result.counts:
 			body = ["No claimed contracts were found for this period yet."]
 		else:
-			rankings = result.counts.most_common()
+			rankings = sorted(
+				result.counts.items(),
+				key=lambda item: (-item[1], item[0].lower()),
+			)
 			lines = []
 			for index, (member_name, count) in enumerate(rankings, start=1):
 				medal = ""
