@@ -102,6 +102,14 @@ def get_previous_month_window(now_local: datetime) -> tuple[datetime, datetime, 
 	return start_previous_utc, end_previous_utc, label
 
 
+def get_current_month_window(now_local: datetime) -> tuple[datetime, datetime, str]:
+	start_current_month_local = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+	start_current_utc = start_current_month_local.astimezone(timezone.utc)
+	end_current_utc = now_local.astimezone(timezone.utc)
+	label = now_local.strftime("%B %Y")
+	return start_current_utc, end_current_utc, label
+
+
 async def fetch_all_archived_forum_posts(
 	forum_channel: discord.ForumChannel,
 	page_size: int = 100,
@@ -417,13 +425,14 @@ class ForumArchiveBot(commands.Bot):
 			return None
 		return candidates[0]
 
-	async def build_previous_month_leaderboard(
+	async def build_leaderboard_for_window(
 		self,
 		forum_channel: discord.ForumChannel,
+		start_utc: datetime,
+		end_utc: datetime,
+		month_label: str,
 		page_size: int = 100,
 	) -> LeaderboardResult:
-		now_local = datetime.now(self.local_tz)
-		start_utc, end_utc, month_label = get_previous_month_window(now_local)
 		LOGGER.info(
 			"Building leaderboard for month=%s channel_id=%s window_start=%s window_end=%s",
 			month_label,
@@ -493,6 +502,36 @@ class ForumArchiveBot(commands.Bot):
 			total_contracts=considered_threads,
 			considered_threads=considered_threads,
 			unclaimed_threads=unclaimed_threads,
+		)
+
+	async def build_previous_month_leaderboard(
+		self,
+		forum_channel: discord.ForumChannel,
+		page_size: int = 100,
+	) -> LeaderboardResult:
+		now_local = datetime.now(self.local_tz)
+		start_utc, end_utc, month_label = get_previous_month_window(now_local)
+		return await self.build_leaderboard_for_window(
+			forum_channel,
+			start_utc=start_utc,
+			end_utc=end_utc,
+			month_label=month_label,
+			page_size=page_size,
+		)
+
+	async def build_current_month_leaderboard(
+		self,
+		forum_channel: discord.ForumChannel,
+		page_size: int = 100,
+	) -> LeaderboardResult:
+		now_local = datetime.now(self.local_tz)
+		start_utc, end_utc, month_label = get_current_month_window(now_local)
+		return await self.build_leaderboard_for_window(
+			forum_channel,
+			start_utc=start_utc,
+			end_utc=end_utc,
+			month_label=month_label,
+			page_size=page_size,
 		)
 
 	def render_leaderboard_message(
@@ -757,6 +796,77 @@ async def post_monthly_leaderboard(
 		)
 	except Exception:
 		LOGGER.exception("/contract-leaderboard failed in guild_id=%s", interaction.guild.id)
+		await interaction.followup.send(
+			"An unexpected error occurred while posting the leaderboard. Please check bot logs."
+		)
+
+
+@bot.tree.command(
+	name="current-month-leaderboard",
+	description="Generate and post the current-month contract leaderboard now.",
+)
+@app_commands.describe(
+	forum_channel_id="Forum channel ID. Uses DISCORD_FORUM_CHANNEL_ID or CONTRACT_FORUM_CHANNEL_NAME if omitted.",
+	leaderboard_channel_id="Text channel ID to post into. Uses LEADERBOARD_CHANNEL_ID or channel name if omitted.",
+	page_size="Archived forum pagination size (1-100).",
+)
+async def current_month_leaderboard(
+	interaction: discord.Interaction,
+	page_size: app_commands.Range[int, 1, 100] = 100,
+	forum_channel_id: Optional[int] = None,
+	leaderboard_channel_id: Optional[int] = None,
+) -> None:
+	LOGGER.info(
+		"/current-month-leaderboard invoked by user_id=%s guild_id=%s forum_channel_id=%s leaderboard_channel_id=%s page_size=%s",
+		interaction.user.id,
+		interaction.guild.id if interaction.guild else None,
+		forum_channel_id,
+		leaderboard_channel_id,
+		page_size,
+	)
+	await interaction.response.defer(thinking=True)
+
+	if interaction.guild is None:
+		LOGGER.warning("/current-month-leaderboard used outside a guild by user_id=%s", interaction.user.id)
+		await interaction.followup.send("This command can only be used inside a server.")
+		return
+
+	forum_channel = await bot.resolve_forum_channel(interaction.guild, forum_channel_id=forum_channel_id)
+	if forum_channel is None:
+		LOGGER.warning("/current-month-leaderboard could not resolve forum channel in guild_id=%s", interaction.guild.id)
+		await interaction.followup.send(
+			"Could not find the forum channel. Set `DISCORD_FORUM_CHANNEL_ID` or `CONTRACT_FORUM_CHANNEL_NAME`."
+		)
+		return
+
+	leaderboard_channel = await bot.resolve_leaderboard_channel(
+		interaction.guild,
+		leaderboard_channel_id=leaderboard_channel_id,
+		create_if_missing=True,
+	)
+	if leaderboard_channel is None:
+		LOGGER.warning("/current-month-leaderboard could not resolve leaderboard channel in guild_id=%s", interaction.guild.id)
+		await interaction.followup.send(
+			"Could not find/create the leaderboard channel. Ensure bot can manage channels or set `LEADERBOARD_CHANNEL_ID`."
+		)
+		return
+
+	try:
+		result = await bot.build_current_month_leaderboard(forum_channel, page_size=page_size)
+		message = bot.render_leaderboard_message(forum_channel, result)
+		await leaderboard_channel.send(message)
+
+		await interaction.followup.send(
+			f"Posted current-month leaderboard to {leaderboard_channel.mention} for `{result.month_label}`."
+		)
+		LOGGER.info(
+			"/current-month-leaderboard posted successfully (guild_id=%s, channel_id=%s, month=%s)",
+			interaction.guild.id,
+			leaderboard_channel.id,
+			result.month_label,
+		)
+	except Exception:
+		LOGGER.exception("/current-month-leaderboard failed in guild_id=%s", interaction.guild.id)
 		await interaction.followup.send(
 			"An unexpected error occurred while posting the leaderboard. Please check bot logs."
 		)
