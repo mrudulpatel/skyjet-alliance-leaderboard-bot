@@ -551,7 +551,7 @@ class ForumArchiveBot(commands.Bot):
 			f"Contract Board: {forum_channel.mention}",
 			f"Contracts posted: **{result.total_contracts}**", # Considered threads should be the same as total contracts, but including it for clarity
 			f"Claimed contracts: **{result.total_contracts - result.unclaimed_threads}**", # Adding total claimed contracts for additional context and to highlight the competitive aspect
-			f"Unclaimed contracts: **{result.unclaimed_threads}**", # Adding unclaimed contracts for additional context, as it can be a significant portion of total contracts and is relevant to the competition
+			f"Rejected contracts: **{result.unclaimed_threads}**", # Adding unclaimed contracts for additional context, as it can be a significant portion of total contracts and is relevant to the competition
 			"",
 		]
 
